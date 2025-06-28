@@ -102,7 +102,8 @@ def main():
 
         key = cv2.waitKey(1) & 0xFF
         # only capture key when window is focused
-        if key == ord('q'):
+        # if key == ord('27'):
+        if key == 27:
             break
         elif control_ready.is_set() and key != 255:
             k = chr(key)
