@@ -1,5 +1,3 @@
-# remote_machine.py
-
 import sys
 import asyncio
 import ssl
@@ -17,11 +15,13 @@ async def stream_handler(ws):
             monitor = sct.monitors[1]
             while True:
                 img = np.array(sct.grab(monitor))
-                ret, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY),50])
+                # Adjust streaming quality by image compression quality now it's 100
+                ret, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY),100])
                 if not ret:
                     continue
                 await ws.send(buf.tobytes())
-                await asyncio.sleep(1/15)
+                # adjust the frame rate from the code below now it's 30fps
+                await asyncio.sleep(1/30)
     except websockets.ConnectionClosed:
         pass
     finally:
@@ -62,6 +62,14 @@ async def control_handler(ws):
                     pyautogui.scroll(1) # Scroll up by 1 unit
                 elif direction == "down":
                     pyautogui.scroll(-1) # Scroll down by 1 unit
+            elif et == "mouse_dblclick":
+                btn = ev["button"]
+                x = ev.get("x")
+                y = ev.get("y")
+                if x is not None and y is not None:
+                    pyautogui.click(x=x, y=y, button=btn, clicks=2)
+                else:
+                    pyautogui.click(button=btn, clicks=2)
             else:
                 print(f"[{datetime.now()}] ❓ Unknown event type: {et!r}")
     except websockets.ConnectionClosed:
