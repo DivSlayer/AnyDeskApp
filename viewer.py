@@ -10,7 +10,6 @@ import cv2
 import numpy as np
 import websockets
 from datetime import datetime
-from pynput import mouse, keyboard
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -61,45 +60,29 @@ def start_network(ip, port):
 # ─── Control Sender ─────────────────────────────────────────────────────────
 
 def send_event(evt: dict):
-    """Send JSON event over the control channel via the stored network_loop."""
     if not control_ready.is_set():
-        print(f"[{datetime.now()}] ❌ CONTROL not ready, dropping {evt}")
         return
-    print(f"[{datetime.now()}] SENDING: {evt}")
     asyncio.run_coroutine_threadsafe(
         ctrl_ws.send(json.dumps(evt)),
         network_loop
     )
 
-# ─── Input Callbacks via pynput ──────────────────────────────────────────────
+# ─── Mouse Callback (window‑local) ───────────────────────────────────────────
 
-def on_move(x, y):
-    send_event({"type":"mouse_move",  "x":int(x), "y":int(y)})
-
-def on_click(x, y, button, pressed):
-    send_event({
-        "type":"mouse_click",
-        "button": button.name,
-        "action": "down" if pressed else "up"
-    })
-
-def on_scroll(x, y, dx, dy):
-    # optional: implement scroll
-    pass
-
-def on_key_press(key):
-    try:
-        k = key.char
-    except AttributeError:
-        k = key.name
-    send_event({"type":"key","key":k,"action":"down"})
-
-def on_key_release(key):
-    try:
-        k = key.char
-    except AttributeError:
-        k = key.name
-    send_event({"type":"key","key":k,"action":"up"})
+def on_mouse(event, x, y, flags, param):
+    # Only fires when mouse is over the window
+    if not control_ready.is_set():
+        return
+    if event == cv2.EVENT_MOUSEMOVE:
+        send_event({"type":"mouse_move",  "x":x, "y":y})
+    elif event == cv2.EVENT_LBUTTONDOWN:
+        send_event({"type":"mouse_click","button":"left","action":"down"})
+    elif event == cv2.EVENT_LBUTTONUP:
+        send_event({"type":"mouse_click","button":"left","action":"up"})
+    elif event == cv2.EVENT_RBUTTONDOWN:
+        send_event({"type":"mouse_click","button":"right","action":"down"})
+    elif event == cv2.EVENT_RBUTTONUP:
+        send_event({"type":"mouse_click","button":"right","action":"up"})
 
 # ─── Main ────────────────────────────────────────────────────────────────────
 
@@ -107,24 +90,32 @@ def main():
     ip   = sys.argv[1] if len(sys.argv)>1 else "192.168.100.10"
     port = sys.argv[2] if len(sys.argv)>2 else "8765"
 
-    # 1) Start network thread (video & control coroutines)
+    # 1) Start networking in background
     t = threading.Thread(target=start_network, args=(ip, port), daemon=True)
     t.start()
 
-    # 2) Start global input listeners
-    mouse.Listener(on_move=on_move,
-                   on_click=on_click,
-                   on_scroll=on_scroll).start()
-    keyboard.Listener(on_press=on_key_press,
-                      on_release=on_key_release).start()
-
-    # 3) Display loop
+    # 2) Prepare OpenCV window and mouse callback
     cv2.namedWindow("Remote Desktop", cv2.WINDOW_NORMAL)
+    cv2.setMouseCallback("Remote Desktop", on_mouse)
+
+    # 3) Display & keyboard loop
     while True:
-        frame = frame_q.get()  # blocking until next frame
+        frame = frame_q.get()  # blocks until next frame
         cv2.imshow("Remote Desktop", frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+
+        key = cv2.waitKey(1) & 0xFF
+        # q to quit
+        if key == ord('q'):
             break
+        # any other key when window focused
+        elif control_ready.is_set() and key != 255:
+            try:
+                k = chr(key)
+            except:
+                k = ''
+            if k:
+                send_event({"type":"key","key":k,"action":"down"})
+                send_event({"type":"key","key":k,"action":"up"})
 
     cv2.destroyAllWindows()
     print("Viewer exiting…")
