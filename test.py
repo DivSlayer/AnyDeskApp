@@ -1,1 +1,13 @@
-DEBUG REMOTE: Received key event: {'key': 'd', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'd', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'f', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'f', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'k', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'j', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 's', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'n', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'k', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'd', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'j', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'n', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 's', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'f', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'd', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'f', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': '', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'a', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': '▒', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'x', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'shift', 'action': 'down'}DEBUG REMOTE: Received key event: {'key': 'shift', 'action': 'up'}DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'x', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'x', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}
