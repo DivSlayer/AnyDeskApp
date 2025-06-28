@@ -66,7 +66,8 @@ async def control_handler(ws):
     finally:
         print(f"[{datetime.now()}] CONTROL client disconnected: {client}")
 
-async def handler(ws, path):
+async def handler(ws):
+    path = ws.reqquest.path
     if path == "/video":
         await stream_handler(ws)
     elif path == "/control":
