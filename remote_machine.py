@@ -54,6 +54,14 @@ async def control_handler(ws):
                     pyautogui.keyDown(key)
                 else:
                     pyautogui.keyUp(key)
+            elif et == "mouse_scroll":
+                direction = ev["direction"]
+                # pyautogui.scroll takes integer for amount
+                # A positive amount scrolls up, negative scrolls down
+                if direction == "up":
+                    pyautogui.scroll(1) # Scroll up by 1 unit
+                elif direction == "down":
+                    pyautogui.scroll(-1) # Scroll down by 1 unit
             else:
                 print(f"[{datetime.now()}] ❓ Unknown event type: {et!r}")
     except websockets.ConnectionClosed:
@@ -75,12 +83,29 @@ async def main():
     bind_ip = sys.argv[1] if len(sys.argv)>1 else "0.0.0.0"
     port    = int(sys.argv[2]) if len(sys.argv)>2 else 8765
 
+    # SSL Context for the server
+    # This assumes you have 'cert.pem' and 'key.pem' files in the same directory
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_ctx.load_cert_chain('cert.pem','key.pem')
+    try:
+        ssl_ctx.load_cert_chain("cert.pem", "key.pem")
+    except FileNotFoundError:
+        print("Error: SSL certificate (cert.pem) or key (key.pem) not found.")
+        print("Please ensure 'cert.pem' and 'key.pem' are in the same directory as remote_machine.py.")
+        print("You can generate self-signed certificates using OpenSSL (e.g., openssl req -x509 -newkey rsa:4096 -nodes -out cert.pem -keyout key.pem -days 365)")
+        sys.exit(1)
 
-    print(f"[{datetime.now()}] Server listening on wss://{bind_ip}:{port}")
-    await websockets.serve(handler, bind_ip, port, ssl=ssl_ctx)
-    await asyncio.Future()  # keep running
+    print(f"[{datetime.now()}] Starting server on {bind_ip}:{port}")
+    async with websockets.serve(handler, bind_ip, port, ssl=ssl_ctx):
+        await asyncio.Future() # run forever
 
-if __name__=="__main__":
-    asyncio.run(main())
+if __name__ == "__main__":
+    # Ensure pyautogui failsafe is disabled for remote control
+    pyautogui.FAILSAFE = False
+    pyautogui.PAUSE = 0.001 # Small pause between pyautogui actions
+
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nServer stopped by user (Ctrl+C)")
+    except Exception as e:
+        print(f"An error occurred: {e}")
