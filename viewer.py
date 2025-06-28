@@ -9,7 +9,8 @@ import numpy as np
 import websockets
 from datetime import datetime
 from pynput import keyboard
-import time # Added for time.sleep
+import time
+import string # New import for string.printable
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -23,7 +24,6 @@ remote_w, remote_h = None, None
 pad_vert, pad_horiz, new_w, new_h = 0, 0, 0, 0
 
 # Track currently pressed modifier keys to ensure proper down/up sequencing
-# This set stores the pyautogui-compatible string names of currently held modifiers
 currently_pressed_modifiers = set()
 
 # ─── Asyncio Coroutines ──────────────────────────────────────────────────────
@@ -70,7 +70,6 @@ def start_network(ip, port):
 def send_event(evt: dict):
     if not control_ready.is_set():
         return
-    # Use run_coroutine_threadsafe for sending from the pynput thread
     asyncio.run_coroutine_threadsafe(
         ctrl_ws.send(json.dumps(evt)),
         network_loop
@@ -80,12 +79,9 @@ def send_event(evt: dict):
 
 def on_mouse(event, x, y, flags, param):
     global remote_w, remote_h, pad_vert, pad_horiz, new_w, new_h
-    # Map (x, y) from window to remote screen
-    # Remove padding
     x_img = x - pad_horiz
     y_img = y - pad_vert
     if 0 <= x_img < new_w and 0 <= y_img < new_h:
-        # Map to remote screen coordinates
         remote_x = int(x_img * remote_w / new_w)
         remote_y = int(y_img * remote_h / new_h)
         if not control_ready.is_set(): return
@@ -103,56 +99,54 @@ def on_mouse(event, x, y, flags, param):
             send_event({"type":"mouse_dblclick","button":"left","x":remote_x,"y":remote_y})
         elif event == cv2.EVENT_RBUTTONDBLCLK:
             send_event({"type":"mouse_dblclick","button":"right","x":remote_x,"y":remote_y})
-    # else: mouse is in black bar area, ignore or clamp as needed
 
 # ─── pynput Keyboard Listener Callbacks ──────────────────────────────────────
 
-# Helper to get a consistent string for common modifier keys and special keys
 def get_pyautogui_key_name(key):
-    try:
-        return key.char
-    except AttributeError:
-        if key == keyboard.Key.space:
-            return "space"
-        elif key == keyboard.Key.enter:
-            return "enter"
-        elif key == keyboard.Key.backspace:
-            return "backspace"
-        elif key == keyboard.Key.tab:
-            return "tab"
-        elif key == keyboard.Key.esc:
-            return "escape"
-        elif key == keyboard.Key.up:
-            return "up"
-        elif key == keyboard.Key.down:
-            return "down"
-        elif key == keyboard.Key.left:
-            return "left"
-        elif key == keyboard.Key.right:
-            return "right"
-        elif key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
-            return "control"
-        elif key == keyboard.Key.alt_l or key == keyboard.Key.alt_r:
-            return "alt"
-        elif key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
-            return "shift"
-        elif key == keyboard.Key.cmd_l or key == keyboard.Key.cmd_r:
-            return "win"
-        elif key == keyboard.Key.delete:
-            return "delete"
-        elif key == keyboard.Key.home:
-            return "home"
-        elif key == keyboard.Key.end:
-            return "end"
-        elif key == keyboard.Key.page_up:
-            return "pageup"
-        elif key == keyboard.Key.page_down:
-            return "pagedown"
+    # Handle regular character keys and symbols
+    if hasattr(key, 'char') and key.char is not None:
+        # pynput returns control characters for Ctrl+Key combinations
+        # e.g., Ctrl+A -> '\x01', Ctrl+C -> '\x03'
+        # We need to convert these back to their literal character for pyautogui
+        try:
+            char_code = ord(key.char)
+            if 1 <= char_code <= 26: # This range covers Ctrl+A to Ctrl+Z
+                # Convert control char to lowercase letter (e.g., '\x01' -> 'a')
+                return chr(ord('a') + char_code - 1)
+            elif key.char in string.printable and len(key.char) == 1:
+                return key.char # Regular printable characters
+            else:
+                # For other non-standard chars that might have a .char
+                return str(key.char)
+        except TypeError: # key.char might not be convertible to int if it's not a single char
+            return str(key.char) # Fallback to string representation
+
+    # Handle special keys (e.g., Key.space, Key.ctrl_l)
+    else:
+        if key == keyboard.Key.space: return "space"
+        elif key == keyboard.Key.enter: return "enter"
+        elif key == keyboard.Key.backspace: return "backspace"
+        elif key == keyboard.Key.tab: return "tab"
+        elif key == keyboard.Key.esc: return "escape"
+        elif key == keyboard.Key.up: return "up"
+        elif key == keyboard.Key.down: return "down"
+        elif key == keyboard.Key.left: return "left"
+        elif key == keyboard.Key.right: return "right"
+        elif key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r: return "control"
+        elif key == keyboard.Key.alt_l or key == keyboard.Key.alt_r: return "alt"
+        elif key == keyboard.Key.shift_l or key == keyboard.Key.shift_r: return "shift"
+        elif key == keyboard.Key.cmd_l or key == keyboard.Key.cmd_r: return "win"
+        elif key == keyboard.Key.delete: return "delete"
+        elif key == keyboard.Key.home: return "home"
+        elif key == keyboard.Key.end: return "end"
+        elif key == keyboard.Key.page_up: return "pageup"
+        elif key == keyboard.Key.page_down: return "pagedown"
+        # For function keys like F1, F2, etc.
         elif str(key).startswith('Key.f'):
             return str(key).replace('Key.', '').lower()
         else:
             print(f"Unhandled special key detected by pynput: {key}")
-            return None
+            return None # Return None for truly unhandled keys
 
 def on_press(key):
     if not control_ready.is_set():
@@ -180,12 +174,8 @@ def on_release(key):
     if pyautogui_key:
         print(f"DEBUG VIEWER: Key released: {pyautogui_key} (up)")
         if pyautogui_key in ["control", "alt", "shift", "win"]:
-            # Even if it's not in our set, send 'up' for modifiers
-            # This handles potential inconsistencies or missed 'on_press' events.
             send_event({"type": "key", "key": pyautogui_key, "action": "up"})
             currently_pressed_modifiers.discard(pyautogui_key)
-            # Add a tiny sleep to allow the 'up' event to process on the remote side
-            # before potentially other events are sent.
             time.sleep(0.01) # Small delay (10 milliseconds)
         else:
             send_event({"type": "key", "key": pyautogui_key, "action": "up"})
@@ -201,19 +191,15 @@ def main():
     ip   = sys.argv[1] if len(sys.argv)>1 else "127.0.0.1"
     port = sys.argv[2] if len(sys.argv)>2 else "8000"
 
-    # 1) Start networking in background
     t = threading.Thread(target=start_network, args=(ip, port), daemon=True)
     t.start()
 
-    # 2) Prepare OpenCV window and mouse callback
     cv2.namedWindow("Remote Desktop", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("Remote Desktop", on_mouse)
 
-    # Start pynput keyboard listener in a separate thread
     keyboard_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
     keyboard_listener.start()
 
-    # 3) Display loop
     desired_width = 1920
     desired_height = 1080
     global remote_w, remote_h, pad_vert, pad_horiz, new_w, new_h
