@@ -95,7 +95,7 @@ def start_network(ip, port):
 def send_event(evt: dict):
     # Ensure control_ready is set AND ctrl_ws is not None and is not closed
     # Also check if the network_loop is running before trying to schedule
-    if control_ready.is_set() and ctrl_ws and not ctrl_ws.closed and network_loop and network_loop.is_running():
+    if control_ready.is_set() and ctrl_ws and not ctrl_ws.connection_lost and network_loop and network_loop.is_running():
         try:
             asyncio.run_coroutine_threadsafe(
                 ctrl_ws.send(json.dumps(evt)),
