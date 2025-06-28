@@ -10,7 +10,9 @@ import websockets
 from datetime import datetime
 from pynput import keyboard
 import time
-import string # New import for string.printable
+import string
+
+from get_local_ip import get_private_ip_and_subnet # New import for string.printable
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -188,7 +190,8 @@ def on_release(key):
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
-    ip   = sys.argv[1] if len(sys.argv)>1 else "127.0.0.1"
+    local_ip,subnet = get_private_ip_and_subnet()
+    ip   = sys.argv[1] if len(sys.argv)>1 else local_ip
     port = sys.argv[2] if len(sys.argv)>2 else "8000"
 
     t = threading.Thread(target=start_network, args=(ip, port), daemon=True)
