@@ -32,7 +32,6 @@ async def control_handler(ws):
     print(f"[{datetime.now()}] CONTROL client connected: {client}")
     try:
         async for msg in ws:
-            print(f"[{datetime.now()}] RAW CONTROL msg: {msg!r}")
             try:
                 ev = json.loads(msg)
             except json.JSONDecodeError:
@@ -40,21 +39,17 @@ async def control_handler(ws):
                 continue
 
             et = ev.get("type")
-            print(f"[{datetime.now()}] Parsed event: {ev}")
             if et == "mouse_move":
                 x, y = ev["x"], ev["y"]
-                print(f"[{datetime.now()}] → moveTo({x},{y})")
                 pyautogui.moveTo(x, y)
             elif et == "mouse_click":
                 btn, action = ev["button"], ev["action"]
-                print(f"[{datetime.now()}] → mouse{action}({btn})")
                 if action == "down":
                     pyautogui.mouseDown(button=btn)
                 else:
                     pyautogui.mouseUp(button=btn)
             elif et == "key":
                 key, action = ev["key"], ev["action"]
-                print(f"[{datetime.now()}] → key{action}({key})")
                 if action == "down":
                     pyautogui.keyDown(key)
                 else:
