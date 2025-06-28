@@ -1,94 +1,97 @@
-# gui_launcher.py
+# gui.py
 
 import tkinter as tk
 from tkinter import messagebox
 import socket
-import threading
 import subprocess
 import sys
 
-class LauncherGUI:
-    def __init__(self, master):
-        self.master = master
-        master.title("Remote Desktop Launcher")
+class LauncherGUI(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("AnyDesk Clone Launcher")
 
         # Role selection
         self.role_var = tk.StringVar(value="client")
-        tk.Radiobutton(master, text="Connect to Remote", variable=self.role_var,
-                       value="client", command=self._render_frame).pack(anchor="w")
-        tk.Radiobutton(master, text="Be Remote Machine", variable=self.role_var,
-                       value="server", command=self._render_frame).pack(anchor="w")
+        tk.Radiobutton(self, text="Connect to Remote", variable=self.role_var,
+                       value="client", command=self.render_frame).pack(anchor="w", padx=10, pady=5)
+        tk.Radiobutton(self, text="Be Remote Machine", variable=self.role_var,
+                       value="server", command=self.render_frame).pack(anchor="w", padx=10)
 
-        # Container for dynamic frame
-        self.frame = tk.Frame(master)
-        self.frame.pack(fill="both", expand=True, pady=10)
+        # Dynamic frame container
+        self.frm = tk.Frame(self)
+        self.frm.pack(padx=10, pady=10)
 
-        # Other controls
-        self._render_frame()
+        self.render_frame()
 
-    def _render_frame(self):
-        # Clear old widgets
-        for w in self.frame.winfo_children():
-            w.destroy()
+    def render_frame(self):
+        # Clean up
+        for widget in self.frm.winfo_children():
+            widget.destroy()
 
         role = self.role_var.get()
         if role == "client":
-            tk.Label(self.frame, text="Server IP:").grid(row=0, column=0, sticky="e")
-            self.ip_entry = tk.Entry(self.frame)
-            self.ip_entry.insert(0, "192.168.100.10")
+            tk.Label(self.frm, text="Server IP:").grid(row=0, column=0, sticky="e")
+            self.ip_entry = tk.Entry(self.frm)
+            self.ip_entry.insert(0, "127.0.0.1")
             self.ip_entry.grid(row=0, column=1)
 
-            tk.Label(self.frame, text="Port:").grid(row=1, column=0, sticky="e")
-            self.port_entry = tk.Entry(self.frame)
-            self.port_entry.insert(0, "8765")
+            tk.Label(self.frm, text="Port:").grid(row=1, column=0, sticky="e")
+            self.port_entry = tk.Entry(self.frm)
+            self.port_entry.insert(0, "8000")
             self.port_entry.grid(row=1, column=1)
 
-            tk.Button(self.frame, text="Connect",
-                      command=self.start_client).grid(row=2, columnspan=2, pady=5)
+            tk.Button(self.frm, text="Connect",
+                      command=self.start_client).grid(row=2, column=0, columnspan=2, pady=10)
         else:
-            local_ip = self._get_local_ip()
-            tk.Label(self.frame, text=f"Local IP: {local_ip}").pack()
+            local_ip = self.get_local_ip()
+            tk.Label(self.frm, text=f"Local IP: {local_ip}").pack()
 
-            tk.Label(self.frame, text="Override IP (optional):").pack()
-            self.override_entry = tk.Entry(self.frame)
-            self.override_entry.pack()
+            tk.Label(self.frm, text="Override IP (optional):").pack(pady=(5,0))
+            self.override_entry = tk.Entry(self.frm)
             self.override_entry.insert(0, local_ip)
+            self.override_entry.pack()
 
-            tk.Label(self.frame, text="Port:").pack()
-            self.port_entry = tk.Entry(self.frame)
-            self.port_entry.insert(0, "8765")
+            tk.Label(self.frm, text="Port:").pack(pady=(5,0))
+            self.port_entry = tk.Entry(self.frm)
+            self.port_entry.insert(0, "8000")
             self.port_entry.pack()
 
-            tk.Button(self.frame, text="Start Server",
-                      command=self.start_server).pack(pady=5)
+            tk.Button(self.frm, text="Start Server",
+                      command=self.start_server).pack(pady=10)
 
-    def _get_local_ip(self):
+    def get_local_ip(self):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
             s.close()
-        except Exception:
+        except:
             ip = "127.0.0.1"
         return ip
 
     def start_client(self):
         ip = self.ip_entry.get().strip()
         port = self.port_entry.get().strip()
-        # Launch viewer.py with arguments
         cmd = [sys.executable, "viewer.py", ip, port]
-        subprocess.Popen(cmd)
-        self.master.destroy()
+        try:
+            subprocess.Popen(cmd)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start viewer:\n{e}")
+            return
+        self.destroy()
 
     def start_server(self):
         ip = self.override_entry.get().strip()
         port = self.port_entry.get().strip()
-        # Launch remote_machine.py with arguments
         cmd = [sys.executable, "remote_machine.py", ip, port]
-        subprocess.Popen(cmd)
-        self.master.destroy()
+        try:
+            subprocess.Popen(cmd)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to start server:\n{e}")
+            return
+        self.destroy()
 
 if __name__ == '__main__':
-    root = tk.Tk()
-    app = LauncherGUI(root)
-    root.mainloop()
+    app = LauncherGUI()
+    app.mainloop()
