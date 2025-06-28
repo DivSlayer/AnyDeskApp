@@ -8,6 +8,8 @@ import cv2
 import numpy as np
 import websockets
 from datetime import datetime
+from pynput import keyboard
+import time # Added for time.sleep
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
 
@@ -19,6 +21,10 @@ network_loop   = None              # the asyncio loop in the network thread
 # For mouse mapping
 remote_w, remote_h = None, None
 pad_vert, pad_horiz, new_w, new_h = 0, 0, 0, 0
+
+# Track currently pressed modifier keys to ensure proper down/up sequencing
+# This set stores the pyautogui-compatible string names of currently held modifiers
+currently_pressed_modifiers = set()
 
 # ─── Asyncio Coroutines ──────────────────────────────────────────────────────
 
@@ -64,6 +70,7 @@ def start_network(ip, port):
 def send_event(evt: dict):
     if not control_ready.is_set():
         return
+    # Use run_coroutine_threadsafe for sending from the pynput thread
     asyncio.run_coroutine_threadsafe(
         ctrl_ws.send(json.dumps(evt)),
         network_loop
@@ -98,6 +105,96 @@ def on_mouse(event, x, y, flags, param):
             send_event({"type":"mouse_dblclick","button":"right","x":remote_x,"y":remote_y})
     # else: mouse is in black bar area, ignore or clamp as needed
 
+# ─── pynput Keyboard Listener Callbacks ──────────────────────────────────────
+
+# Helper to get a consistent string for common modifier keys and special keys
+def get_pyautogui_key_name(key):
+    try:
+        return key.char
+    except AttributeError:
+        if key == keyboard.Key.space:
+            return "space"
+        elif key == keyboard.Key.enter:
+            return "enter"
+        elif key == keyboard.Key.backspace:
+            return "backspace"
+        elif key == keyboard.Key.tab:
+            return "tab"
+        elif key == keyboard.Key.esc:
+            return "escape"
+        elif key == keyboard.Key.up:
+            return "up"
+        elif key == keyboard.Key.down:
+            return "down"
+        elif key == keyboard.Key.left:
+            return "left"
+        elif key == keyboard.Key.right:
+            return "right"
+        elif key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
+            return "control"
+        elif key == keyboard.Key.alt_l or key == keyboard.Key.alt_r:
+            return "alt"
+        elif key == keyboard.Key.shift_l or key == keyboard.Key.shift_r:
+            return "shift"
+        elif key == keyboard.Key.cmd_l or key == keyboard.Key.cmd_r:
+            return "win"
+        elif key == keyboard.Key.delete:
+            return "delete"
+        elif key == keyboard.Key.home:
+            return "home"
+        elif key == keyboard.Key.end:
+            return "end"
+        elif key == keyboard.Key.page_up:
+            return "pageup"
+        elif key == keyboard.Key.page_down:
+            return "pagedown"
+        elif str(key).startswith('Key.f'):
+            return str(key).replace('Key.', '').lower()
+        else:
+            print(f"Unhandled special key detected by pynput: {key}")
+            return None
+
+def on_press(key):
+    if not control_ready.is_set():
+        return
+    
+    pyautogui_key = get_pyautogui_key_name(key)
+    
+    if pyautogui_key:
+        print(f"DEBUG VIEWER: Key pressed: {pyautogui_key} (down)")
+        if pyautogui_key in ["control", "alt", "shift", "win"]:
+            if pyautogui_key not in currently_pressed_modifiers:
+                send_event({"type": "key", "key": pyautogui_key, "action": "down"})
+                currently_pressed_modifiers.add(pyautogui_key)
+        else:
+            send_event({"type": "key", "key": pyautogui_key, "action": "down"})
+        print(f"DEBUG VIEWER: Currently pressed modifiers: {currently_pressed_modifiers}")
+
+
+def on_release(key):
+    if not control_ready.is_set():
+        return
+    
+    pyautogui_key = get_pyautogui_key_name(key)
+    
+    if pyautogui_key:
+        print(f"DEBUG VIEWER: Key released: {pyautogui_key} (up)")
+        if pyautogui_key in ["control", "alt", "shift", "win"]:
+            # Even if it's not in our set, send 'up' for modifiers
+            # This handles potential inconsistencies or missed 'on_press' events.
+            send_event({"type": "key", "key": pyautogui_key, "action": "up"})
+            currently_pressed_modifiers.discard(pyautogui_key)
+            # Add a tiny sleep to allow the 'up' event to process on the remote side
+            # before potentially other events are sent.
+            time.sleep(0.01) # Small delay (10 milliseconds)
+        else:
+            send_event({"type": "key", "key": pyautogui_key, "action": "up"})
+        print(f"DEBUG VIEWER: Currently pressed modifiers: {currently_pressed_modifiers}")
+            
+    if key == keyboard.Key.esc:
+        print("ESC pressed, stopping keyboard listener.")
+        return False
+
 # ─── Main ────────────────────────────────────────────────────────────────────
 
 def main():
@@ -112,46 +209,59 @@ def main():
     cv2.namedWindow("Remote Desktop", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("Remote Desktop", on_mouse)
 
-    # 3) Display & keyboard loop
+    # Start pynput keyboard listener in a separate thread
+    keyboard_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    keyboard_listener.start()
+
+    # 3) Display loop
     desired_width = 1920
     desired_height = 1080
     global remote_w, remote_h, pad_vert, pad_horiz, new_w, new_h
     while True:
-        frame = frame_q.get()
-        h, w = frame.shape[:2]
-        if remote_w is None or remote_h is None:
-            remote_w, remote_h = w, h
-        aspect_original = w / h
-        aspect_desired = desired_width / desired_height
+        try:
+            frame = frame_q.get(timeout=0.05) 
+        except queue.Empty:
+            if not t.is_alive():
+                print("Network thread died, exiting viewer.")
+                break
+            frame = None
 
-        if aspect_original > aspect_desired:
-            new_w = desired_width
-            new_h = int(desired_width / aspect_original)
-            resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-            pad_vert = (desired_height - new_h) // 2
-            pad_horiz = 0
-            output = cv2.copyMakeBorder(resized, pad_vert, desired_height - new_h - pad_vert, 0, 0, cv2.BORDER_CONSTANT, value=[0,0,0])
-        else:
-            new_h = desired_height
-            new_w = int(desired_height * aspect_original)
-            resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-            pad_horiz = (desired_width - new_w) // 2
-            pad_vert = 0
-            output = cv2.copyMakeBorder(resized, 0, 0, pad_horiz, desired_width - new_w - pad_horiz, cv2.BORDER_CONSTANT, value=[0,0,0])
+        if frame is not None:
+            h, w = frame.shape[:2]
+            if remote_w is None or remote_h is None:
+                remote_w, remote_h = w, h
+            aspect_original = w / h
+            aspect_desired = desired_width / desired_height
 
-        cv2.imshow("Remote Desktop", output)
+            if aspect_original > aspect_desired:
+                new_w = desired_width
+                new_h = int(desired_width / aspect_original)
+                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                pad_vert = (desired_height - new_h) // 2
+                pad_horiz = 0
+                output = cv2.copyMakeBorder(resized, pad_vert, desired_height - new_h - pad_vert, 0, 0, cv2.BORDER_CONSTANT, value=[0,0,0])
+            else:
+                new_h = desired_height
+                new_w = int(desired_height * aspect_original)
+                resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+                pad_horiz = (desired_width - new_w) // 2
+                pad_vert = 0
+                output = cv2.copyMakeBorder(resized, 0, 0, pad_horiz, desired_width - new_w - pad_horiz, cv2.BORDER_CONSTANT, value=[0,0,0])
 
-        key = cv2.waitKey(1) & 0xFF
-        # only capture key when window is focused
-        # if key == ord('27'):
-        if key == 27:
+            cv2.imshow("Remote Desktop", output)
+
+        key_press = cv2.waitKey(1) & 0xFF
+        if key_press == 27:
             break
-        elif control_ready.is_set() and key != 255:
-            k = chr(key)
-            send_event({"type":"key","key":k,"action":"down"})
-            send_event({"type":"key","key":k,"action":"up"})
+        
+        if not keyboard_listener.is_alive():
+            print("Keyboard listener stopped (possibly due to ESC key), exiting viewer.")
+            break
 
     cv2.destroyAllWindows()
+    if keyboard_listener.is_alive():
+        keyboard_listener.stop()
+        keyboard_listener.join()
     print("Viewer exiting…")
 
 if __name__ == "__main__":

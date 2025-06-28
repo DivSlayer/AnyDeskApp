@@ -15,12 +15,10 @@ async def stream_handler(ws):
             monitor = sct.monitors[1]
             while True:
                 img = np.array(sct.grab(monitor))
-                # Adjust streaming quality by image compression quality now it's 100
                 ret, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY),100])
                 if not ret:
                     continue
                 await ws.send(buf.tobytes())
-                # adjust the frame rate from the code below now it's 30fps
                 await asyncio.sleep(1/30)
     except websockets.ConnectionClosed:
         pass
@@ -50,18 +48,17 @@ async def control_handler(ws):
                     pyautogui.mouseUp(button=btn)
             elif et == "key":
                 key, action = ev["key"], ev["action"]
+                print(f"DEBUG REMOTE: Received key event: {{'key': '{key}', 'action': '{action}'}}") # DEBUG PRINT
                 if action == "down":
                     pyautogui.keyDown(key)
                 else:
                     pyautogui.keyUp(key)
             elif et == "mouse_scroll":
                 direction = ev["direction"]
-                # pyautogui.scroll takes integer for amount
-                # A positive amount scrolls up, negative scrolls down
                 if direction == "up":
-                    pyautogui.scroll(1) # Scroll up by 1 unit
+                    pyautogui.scroll(1)
                 elif direction == "down":
-                    pyautogui.scroll(-1) # Scroll down by 1 unit
+                    pyautogui.scroll(-1)
             elif et == "mouse_dblclick":
                 btn = ev["button"]
                 x = ev.get("x")
@@ -91,8 +88,6 @@ async def main():
     bind_ip = sys.argv[1] if len(sys.argv)>1 else "0.0.0.0"
     port    = int(sys.argv[2]) if len(sys.argv)>2 else 8765
 
-    # SSL Context for the server
-    # This assumes you have 'cert.pem' and 'key.pem' files in the same directory
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     try:
         ssl_ctx.load_cert_chain("cert.pem", "key.pem")
@@ -104,12 +99,11 @@ async def main():
 
     print(f"[{datetime.now()}] Starting server on {bind_ip}:{port}")
     async with websockets.serve(handler, bind_ip, port, ssl=ssl_ctx):
-        await asyncio.Future() # run forever
+        await asyncio.Future()
 
 if __name__ == "__main__":
-    # Ensure pyautogui failsafe is disabled for remote control
     pyautogui.FAILSAFE = False
-    pyautogui.PAUSE = 0.001 # Small pause between pyautogui actions
+    pyautogui.PAUSE = 0.001
 
     try:
         asyncio.run(main())
