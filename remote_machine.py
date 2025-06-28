@@ -1,26 +1,24 @@
-# remote_machine.py
-
 import sys
 import asyncio
 import ssl
+import json
 import websockets
 import mss
 import cv2
 import numpy as np
 import pyautogui
-import json
 from datetime import datetime
 
 async def stream_handler(ws):
-    """Stream desktop frames over the WebSocket."""
+    """Streams the desktop at ~15 FPS as JPEG over /video."""
     client = id(ws)
-    print(f"[{datetime.now()}] Video client connected: {client}")
+    print(f"[{datetime.now()}] VIDEO client connected: {client}")
     try:
         with mss.mss() as sct:
             monitor = sct.monitors[1]
             while True:
-                frame = np.array(sct.grab(monitor))
-                ret, buf = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 50])
+                img = np.array(sct.grab(monitor))
+                ret, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY),50])
                 if not ret:
                     continue
                 await ws.send(buf.tobytes())
@@ -28,25 +26,25 @@ async def stream_handler(ws):
     except websockets.ConnectionClosed:
         pass
     finally:
-        print(f"[{datetime.now()}] Video client disconnected: {client}")
+        print(f"[{datetime.now()}] VIDEO client disconnected: {client}")
 
 async def control_handler(ws):
-    """Receive JSON mouse/keyboard events and replay them locally."""
+    """Receives JSON mouse/keyboard events over /control and replays via pyautogui."""
     client = id(ws)
-    print(f"[{datetime.now()}] Control client connected: {client}")
+    print(f"[{datetime.now()}] CONTROL client connected: {client}")
     try:
         async for msg in ws:
             ev = json.loads(msg)
-            etype = ev.get("type")
-            if etype == "mouse_move":
+            t = ev.get("type")
+            if t == "mouse_move":
                 pyautogui.moveTo(ev["x"], ev["y"])
-            elif etype == "mouse_click":
+            elif t == "mouse_click":
                 btn, action = ev["button"], ev["action"]
                 if action == "down":
                     pyautogui.mouseDown(button=btn)
                 else:
                     pyautogui.mouseUp(button=btn)
-            elif etype == "key":
+            elif t == "key":
                 key, action = ev["key"], ev["action"]
                 if action == "down":
                     pyautogui.keyDown(key)
@@ -55,10 +53,9 @@ async def control_handler(ws):
     except websockets.ConnectionClosed:
         pass
     finally:
-        print(f"[{datetime.now()}] Control client disconnected: {client}")
+        print(f"[{datetime.now()}] CONTROL client disconnected: {client}")
 
 async def handler(ws):
-    """Dispatch based on the request path (/video or /control)."""
     path = ws.request.path
     if path == "/video":
         await stream_handler(ws)
@@ -67,18 +64,16 @@ async def handler(ws):
     else:
         await ws.close()
 
-async def run_server(bind_ip, port):
+async def main():
+    bind_ip = sys.argv[1] if len(sys.argv)>1 else "0.0.0.0"
+    port    = int(sys.argv[2]) if len(sys.argv)>2 else 8765
+
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ssl_ctx.load_cert_chain('cert.pem', 'key.pem')
+    ssl_ctx.load_cert_chain('cert.pem','key.pem')
 
-    print(f"[{datetime.now()}] Starting server on wss://{bind_ip}:{port}")
-    server = await websockets.serve(handler, bind_ip, port, ssl=ssl_ctx)
-    await server.wait_closed()
+    print(f"[{datetime.now()}] Server listening on wss://{bind_ip}:{port}")
+    await websockets.serve(handler, bind_ip, port, ssl=ssl_ctx)
+    await asyncio.Future()  # run forever
 
-def main():
-    ip   = sys.argv[1] if len(sys.argv) > 1 else "0.0.0.0"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8765
-    asyncio.run(run_server(ip, port))
-
-if __name__ == "__main__":
-    main()
+if __name__=="__main__":
+    asyncio.run(main())

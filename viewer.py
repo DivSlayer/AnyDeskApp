@@ -1,121 +1,112 @@
-
-# Salam
-
 import sys
-import threading
 import asyncio
 import ssl
 import json
+import threading
 import queue
-from datetime import datetime
-
-import numpy as np
 import cv2
+import numpy as np
 import websockets
+from datetime import datetime
+from pynput import mouse, keyboard
 
-# Thread-safe queue for incoming frames
-global frame_queue, ctrl_ws, connection_lost, running
-frame_queue = queue.Queue()
+# Thread-safe queue for video frames
+frame_q = queue.Queue()
+# WebSocket for control
 ctrl_ws = None
-connection_lost = True
-running = True
+# Flag to indicate control channel status
+control_ready = threading.Event()
 
-async def recv_video(uri):
-    """Receive frames from server and enqueue them."""
-    global running
+async def video_loop(uri):
     ssl_ctx = ssl._create_unverified_context()
     async with websockets.connect(uri + "/video", ssl=ssl_ctx) as vws:
-        print(f"[{datetime.now()}] Video stream connected")
-        while running:
-            try:
-                data = await vws.recv()
-            except websockets.ConnectionClosed:
-                break
-            frame = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
-            if frame is not None:
-                frame_queue.put(frame)
+        print(f"[{datetime.now()}] Video connected")
+        while True:
+            data = await vws.recv()
+            img = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+            if img is not None:
+                frame_q.put(img)
 
-async def recv_control(uri):
-    """Open control channel for sending events."""
-    global ctrl_ws, connection_lost
+async def control_loop(uri):
+    global ctrl_ws
     ssl_ctx = ssl._create_unverified_context()
     ctrl_ws = await websockets.connect(uri + "/control", ssl=ssl_ctx)
-    connection_lost = False
-    print(f"[{datetime.now()}] Control channel connected")
-    try:
-        await ctrl_ws.wait_closed()
-    finally:
-        connection_lost = True
-        print(f"[{datetime.now()}] Control channel closed")
+    print(f"[{datetime.now()}] Control connected")
+    control_ready.set()
+    await ctrl_ws.wait_closed()
+    print(f"[{datetime.now()}] Control closed")
 
-async def start_network(ip, port):
+def start_network(ip, port):
     uri = f"wss://{ip}:{port}"
-    await asyncio.gather(
-        recv_video(uri),
-        recv_control(uri)
-    )
-
-def network_thread(ip, port):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(start_network(ip, port))
+    loop.run_until_complete(asyncio.gather(
+        video_loop(uri),
+        control_loop(uri)
+    ))
 
-def send_event(evt: dict):
-    """Send control event if channel is open."""
-    if ctrl_ws and not connection_lost:
+def send_event(evt):
+    if control_ready.is_set() and ctrl_ws:
         asyncio.run_coroutine_threadsafe(
             ctrl_ws.send(json.dumps(evt)),
             asyncio.get_event_loop()
         )
     else:
-        print(f"[{datetime.now()}] Cannot send event, control channel lost")
+        # not ready yet
+        pass
 
-# Mouse callback
-def on_mouse(event, x, y, flags, param):
-    if not running or connection_lost:
-        return
-    if event == cv2.EVENT_MOUSEMOVE:
-        send_event({"type": "mouse_move", "x": x, "y": y})
-    elif event == cv2.EVENT_LBUTTONDOWN:
-        send_event({"type": "mouse_click", "button": "left", "action": "down"})
-    elif event == cv2.EVENT_LBUTTONUP:
-        send_event({"type": "mouse_click", "button": "left", "action": "up"})
-    elif event == cv2.EVENT_RBUTTONDOWN:
-        send_event({"type": "mouse_click", "button": "right", "action": "down"})
-    elif event == cv2.EVENT_RBUTTONUP:
-        send_event({"type": "mouse_click", "button": "right", "action": "up"})
+def on_move(x, y):
+    send_event({"type":"mouse_move","x":int(x),"y":int(y)})
 
-# Main viewer loop
+def on_click(x, y, button, pressed):
+    send_event({
+        "type":"mouse_click",
+        "button": button.name,      # 'left' or 'right'
+        "action": "down" if pressed else "up"
+    })
+
+def on_scroll(x, y, dx, dy):
+    # optional: implement scroll if you like
+    pass
+
+def on_key_press(key):
+    try:
+        k = key.char
+    except AttributeError:
+        k = key.name  # special keys
+    send_event({"type":"key","key":k,"action":"down"})
+
+def on_key_release(key):
+    try:
+        k = key.char
+    except AttributeError:
+        k = key.name
+    send_event({"type":"key","key":k,"action":"up"})
+
 def main():
-    global running
-    ip = sys.argv[1] if len(sys.argv) > 1 else "192.168.100.10"
-    port = sys.argv[2] if len(sys.argv) > 2 else "8765"
+    ip   = sys.argv[1] if len(sys.argv)>1 else "192.168.100.10"
+    port = sys.argv[2] if len(sys.argv)>2 else "8765"
 
-    # Start network thread
-t = threading.Thread(target=network_thread, args=(ip, port), daemon=True)
+    # start websockets in background
+    t = threading.Thread(target=start_network, args=(ip, port), daemon=True)
     t.start()
 
-    cv2.namedWindow('Remote Desktop', cv2.WINDOW_NORMAL)
-    cv2.setMouseCallback('Remote Desktop', on_mouse)
+    # start input listeners
+    mouse.Listener(on_move=on_move,
+                   on_click=on_click,
+                   on_scroll=on_scroll).start()
+    keyboard.Listener(on_press=on_key_press,
+                      on_release=on_key_release).start()
 
-    while running:
-        # Show latest frame
-        try:
-            frame = frame_queue.get(timeout=0.05)
-            cv2.imshow('Remote Desktop', frame)
-        except queue.Empty:
-            pass
-        key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
-            running = False
+    # display loop
+    cv2.namedWindow("Remote Desktop", cv2.WINDOW_NORMAL)
+    while True:
+        frame = frame_q.get()
+        cv2.imshow("Remote Desktop", frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-        elif key != 255 and not connection_lost:
-            ch = chr(key)
-            send_event({"type": "key", "key": ch, "action": "down"})
-            send_event({"type": "key", "key": ch, "action": "up"})
 
     cv2.destroyAllWindows()
-    print("Viewer exited")
 
-if __name__ == '__main__':
+if __name__=="__main__":
     main()
