@@ -1,7 +1,13 @@
-import ssl
-
-ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-# Treat your self-signed cert as a CA root:
-ssl_context.load_verify_locations('cert.pem')
-# If you used "CN=localhost" but are connecting to 127.0.0.1 or an IP:
-ssl_context.check_hostname = False
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'x', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'x', 'action': 'up'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'c', 'action': 'down'}
+DEBUG REMOTE: Received key event: {'key': 'control', 'action': 'up'}
