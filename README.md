@@ -1,4 +1,4 @@
-[Preview](banner.png)
+![alt-text](banner.png "Header Card")
 # AnyDeskApp
 
 A simple Python-based remote desktop application inspired by AnyDesk. This project allows you to remotely view and control another machine's desktop over a secure WebSocket connection, using OpenCV for video streaming and pyautogui for remote control.
