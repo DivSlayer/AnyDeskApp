@@ -1,11 +1,17 @@
+import os
 import sys
 import asyncio
 import ssl
 import json
 import websockets
-import mss, cv2, numpy as np
+import mss
+import cv2
+import numpy as np
 import pyautogui
 from datetime import datetime
+
+KEYS_FOLDER = os.path.join(os.getcwd(), 'keys')
+
 
 async def stream_handler(ws):
     client = id(ws)
@@ -15,7 +21,8 @@ async def stream_handler(ws):
             monitor = sct.monitors[1]
             while True:
                 img = np.array(sct.grab(monitor))
-                ret, buf = cv2.imencode('.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY),100])
+                ret, buf = cv2.imencode(
+                    '.jpg', img, [int(cv2.IMWRITE_JPEG_QUALITY), 100])
                 if not ret:
                     continue
                 await ws.send(buf.tobytes())
@@ -24,6 +31,7 @@ async def stream_handler(ws):
         pass
     finally:
         print(f"[{datetime.now()}] VIDEO client disconnected: {client}")
+
 
 async def control_handler(ws):
     client = id(ws)
@@ -48,7 +56,9 @@ async def control_handler(ws):
                     pyautogui.mouseUp(button=btn)
             elif et == "key":
                 key, action = ev["key"], ev["action"]
-                print(f"DEBUG REMOTE: Received key event: {{'key': '{key}', 'action': '{action}'}}") # DEBUG PRINT
+                # DEBUG PRINT
+                print(
+                    f"DEBUG REMOTE: Received key event: {{'key': '{key}', 'action': '{action}'}}")
                 if action == "down":
                     pyautogui.keyDown(key)
                 else:
@@ -74,6 +84,7 @@ async def control_handler(ws):
     finally:
         print(f"[{datetime.now()}] CONTROL client disconnected: {client}")
 
+
 async def handler(ws):
     path = ws.request.path
     if path == "/video":
@@ -84,13 +95,14 @@ async def handler(ws):
         print(f"[{datetime.now()}] Invalid path: {path}, closing")
         await ws.close()
 
+
 async def main():
-    bind_ip = sys.argv[1] if len(sys.argv)>1 else "0.0.0.0"
-    port    = int(sys.argv[2]) if len(sys.argv)>2 else 8765
+    bind_ip = sys.argv[1] if len(sys.argv) > 1 else "0.0.0.0"
+    port = int(sys.argv[2]) if len(sys.argv) > 2 else 8765
 
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     try:
-        ssl_ctx.load_cert_chain("cert.pem", "key.pem")
+        ssl_ctx.load_cert_chain(os.path.join("cert.pem"), os.path.join("key.pem"))
     except FileNotFoundError:
         print("Error: SSL certificate (cert.pem) or key (key.pem) not found.")
         print("Please ensure 'cert.pem' and 'key.pem' are in the same directory as remote_machine.py.")

@@ -12,7 +12,7 @@ from pynput import keyboard
 import time
 import string
 
-from get_local_ip import get_private_ip_and_subnet # New import for string.printable
+from dependencies.get_local_ip import get_private_ip_and_subnet # New import for string.printable
 
 # ─── Globals ─────────────────────────────────────────────────────────────────
 

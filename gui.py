@@ -6,7 +6,7 @@ import sys
 import os
 import cv2
 
-from get_local_ip import get_private_ip_and_subnet
+from dependencies.get_local_ip import get_private_ip_and_subnet
 
 class LauncherGUI(tk.Tk):
     def __init__(self):
