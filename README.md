@@ -22,6 +22,11 @@ A simple Python-based remote desktop application inspired by AnyDesk. This proje
    ```
 2. **Install dependencies:**
    ```bash
+   py -m venv venv
+   #windows
+   cd venv/scripts && activate && cd ../..
+   #ubuntu
+   cd venv/bin && source activate && cd ../..
    pip install -r requirements.txt
    ```
 3. **Generate SSL certificates:**
